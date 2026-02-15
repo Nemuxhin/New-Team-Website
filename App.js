@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, createContext, useContext } from 'react';
+import { createRoot } from 'react-dom/client';
 import { initializeApp } from 'firebase/app';
 import { 
   getFirestore, 
@@ -58,7 +59,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 
-// --- Configuration & Constants ---
+// --- Configuration ---
 const firebaseConfig = {
   apiKey: "AIzaSyAcZy0oY6fmwJ4Lg9Ac-Bq__eMukMC_u0w",
   authDomain: "syrix-team-schedule.firebaseapp.com",
@@ -72,7 +73,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
-const appId = 'syrix-pro-ops'; // Fixed app namespace
+const appId = 'syrix-pro-ops'; 
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const SHORT_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -82,8 +83,11 @@ const TIMEZONES = ["UTC", "GMT", "Europe/London", "America/New_York", "Asia/Toky
 
 // --- Gemini API Helper ---
 const callGemini = async (prompt, systemInstruction = "You are an elite esports coach for team Syrix. Provide concise, professional, tactical insights.") => {
-  const apiKey = ""; // Provided by environment
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+  const apiKey = ""; // Set your VITE_GEMINI_API_KEY in environment variables for production
+  
+  // Using public stable model
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+  
   const payload = {
     contents: [{ parts: [{ text: prompt }] }],
     systemInstruction: { parts: [{ text: systemInstruction }] }
@@ -94,6 +98,8 @@ const callGemini = async (prompt, systemInstruction = "You are an elite esports 
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
+    
+    if (!response.ok) return "AI Offline: Check API Key.";
     const result = await response.json();
     return result.candidates?.[0]?.content?.parts?.[0]?.text || "No intelligence available.";
   } catch (e) {
@@ -128,7 +134,7 @@ const ToastProvider = ({ children }) => {
     );
 };
 
-// --- Hooks ---
+// --- Custom Hooks ---
 const useValorantData = () => {
     const [agentData, setAgentData] = useState({});
     const [mapImages, setMapImages] = useState({});
@@ -436,7 +442,7 @@ const WarRoom = () => {
                     <Card title={`Intel: ${selectedEnemy.name}`} className="h-full">
                         <div className="flex gap-2 overflow-x-auto pb-4 mb-6 scrollbar-hide">
                             {MAPS.map(m => (
-                                <button key={m} onClick={() => { setSelectedMapIntel(m); setIntelInput(selectedEnemy.mapIntel?.[m] || ''); }} className={`px-4 py-2 text-[10px] font-black uppercase italic border transition-all ${selectedMapIntel === m ? 'bg-red-600 border-red-600 text-white' : 'bg-black border-zinc-900 text-zinc-500'}`}>{String(m)}</button>
+                                <button key={m} onClick={() => { setSelectedMapIntel(m); setIntelInput(selectedEnemy.mapIntel?.[m] || ''); }} className={`px-4 py-2 text-[10px] font-black uppercase italic border transition-all ${selectedMapIntel === m ? 'bg-red-600 border-red-600' : 'bg-black border-zinc-900 text-zinc-500'}`}>{String(m)}</button>
                             ))}
                         </div>
                         <textarea 
@@ -483,7 +489,6 @@ const MapVeto = () => {
     );
 };
 
-// --- Hub View Component ---
 const HubView = ({ setActiveTab, activeTab, rosterName, userTimezone, setUserTimezone, roster, shouts, postShout, refineShout, refiningShout, newShout, setNewShout, mapImages, agentData, matches, absences, onLandingClick }) => (
     <div className="flex flex-col h-screen bg-[#020202]">
         <header className="flex-none h-20 border-b border-zinc-900 flex justify-between items-center px-10 bg-black/50 backdrop-blur-xl">
@@ -639,14 +644,31 @@ const HubView = ({ setActiveTab, activeTab, rosterName, userTimezone, setUserTim
     </div>
 );
 
-// --- App Root Component ---
+const LandingNav = ({ scrolled, onHubClick }) => (
+    <nav className={`fixed w-full z-50 transition-all duration-500 border-b ${scrolled ? 'bg-black/95 border-red-900/20 py-4' : 'bg-transparent border-transparent py-8'}`}>
+        <div className="max-w-7xl mx-auto px-10 flex justify-between items-center">
+            <div className="flex items-center gap-3 cursor-pointer">
+                <div className="w-10 h-10 bg-red-600 flex items-center justify-center rounded-sm">
+                    <span className="text-white font-black text-2xl italic">S</span>
+                </div>
+                <span className="font-black text-2xl uppercase tracking-tighter italic text-white">SYRIX</span>
+            </div>
+            <div className="hidden md:flex items-center gap-2">
+                {['home', 'teams', 'shop', 'matches'].map(id => (
+                    <button key={id} className="px-5 py-2 uppercase font-black tracking-widest text-[11px] text-zinc-400 hover:text-red-500 transition-colors">{id}</button>
+                ))}
+                <button onClick={onHubClick} className="ml-6 bg-red-600 text-white px-8 py-2 font-black uppercase italic text-[11px] tracking-widest hover:bg-white hover:text-black transition-all shadow-[0_0_30px_rgba(220,38,38,0.2)]">Command Center</button>
+            </div>
+        </div>
+    </nav>
+);
+
 const App = () => {
     const [view, setView] = useState('landing');
     const [activeTab, setActiveTab] = useState('dashboard');
     const [user, setUser] = useState(null);
     const [rosterName, setRosterName] = useState(null);
     const [scrolled, setScrolled] = useState(false);
-    const [isMenuOpen, setIsMenuOpen] = useState(false);
     
     // Data States
     const [roster, setRoster] = useState([]);
@@ -659,27 +681,6 @@ const App = () => {
 
     const { agentData, mapImages } = useValorantData();
     const addToast = useToast();
-
-    // Reusable Nav Component for Landing
-    const LandingNav = () => (
-        <nav className={`fixed w-full z-50 transition-all duration-500 border-b ${scrolled ? 'bg-black/95 border-red-900/20 py-4' : 'bg-transparent border-transparent py-8'}`}>
-            <div className="max-w-7xl mx-auto px-6 flex justify-between items-center">
-                <div className="flex items-center gap-3 cursor-pointer" onClick={() => scrollToSection('home')}>
-                    <div className="w-10 h-10 bg-red-600 flex items-center justify-center rounded-sm">
-                        <span className="text-white font-black text-2xl italic">S</span>
-                    </div>
-                    <span className="font-black text-2xl uppercase tracking-tighter italic text-white">SYRIX</span>
-                </div>
-                <div className="hidden md:flex items-center gap-2">
-                    {['home', 'teams', 'shop', 'matches'].map(id => (
-                        <button key={id} onClick={() => scrollToSection(id)} className="px-5 py-2 uppercase font-black tracking-widest text-[11px] text-zinc-400 hover:text-red-500 transition-colors">{id}</button>
-                    ))}
-                    <button onClick={() => setView('hub')} className="ml-6 bg-red-600 text-white px-8 py-2 font-black uppercase italic text-[11px] tracking-widest hover:bg-white hover:text-black transition-all shadow-[0_0_30px_rgba(220,38,38,0.2)]">Command Center</button>
-                </div>
-                <button className="md:hidden text-white" onClick={() => setIsMenuOpen(!isMenuOpen)}>{isMenuOpen ? <X size={32} /> : <Menu size={32} />}</button>
-            </div>
-        </nav>
-    );
 
     useEffect(() => {
         const handleScroll = () => setScrolled(window.scrollY > 50);
@@ -733,13 +734,6 @@ const App = () => {
         finally { setRefiningShout(false); }
     };
 
-    const scrollToSection = (id) => {
-      const element = document.getElementById(id);
-      if (element) {
-        element.scrollIntoView({ behavior: 'smooth' });
-      }
-    };
-
     return (
         <div className="min-h-screen bg-[#020202]">
             <style>{`
@@ -755,7 +749,7 @@ const App = () => {
             `}</style>
             {view === 'landing' ? (
                 <>
-                    <LandingNav />
+                    <LandingNav scrolled={scrolled} onHubClick={() => setView('hub')} />
                     <section id="home" className="relative h-screen flex items-center pt-20 overflow-hidden bg-black">
                         <div className="absolute -bottom-10 -left-20 text-[25rem] font-black text-white/[0.02] uppercase select-none leading-none z-0 italic">SYRIX</div>
                         <div className="max-w-7xl mx-auto px-10 w-full grid grid-cols-1 lg:grid-cols-2 gap-12 items-center z-10">
@@ -802,10 +796,7 @@ const App = () => {
     );
 };
 
-export default function Root() {
-    return (
-        <ToastProvider>
-            <App />
-        </ToastProvider>
-    );
-}
+const rootElement = document.getElementById('root');
+if (!rootElement) throw new Error('Failed to find the root element');
+const root = createRoot(rootElement);
+root.render(<ToastProvider><App /></ToastProvider>);
