@@ -8,19 +8,131 @@ html, body {
   margin: 0;
   padding: 0;
   scroll-behavior: smooth;
+  font-family: 'Inter', sans-serif;
 }
 
-/* Custom Scrollbar for Syrix Hub */
+/* --- Custom Components from Old Syrix Hub --- */
+
+/* Glass Panel Effect */
+.glass-panel {
+  background: rgba(15, 15, 15, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+/* Card Shine Hover Effect */
+.card-shine {
+  transition: all 0.3s ease;
+}
+.card-shine:hover {
+  border-color: rgba(220, 38, 38, 0.3);
+  background: rgba(20, 20, 20, 0.95);
+  box-shadow: 0 8px 32px rgba(220, 38, 38, 0.1);
+}
+
+/* --- Animations --- */
+
+/* Slide In (from right) */
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+.animate-slide-in {
+  animation: slideIn 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+/* Fade In (from bottom) */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fade-in {
+  animation: fadeIn 0.4s ease-out forwards;
+}
+
+/* Pulse Red */
+@keyframes pulse-red {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.animate-pulse-red {
+  animation: pulse-red 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Marquee (Ticker) */
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.animate-marquee {
+  animation: marquee 30s linear infinite;
+}
+
+/* Scroll Mouse Animation */
+.scroll-mouse {
+  width: 26px;
+  height: 42px;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  border-radius: 20px;
+  position: relative;
+}
+.scroll-wheel {
+  width: 2px;
+  height: 6px;
+  background: #ef4444;
+  border-radius: 2px;
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  animation: scroll-bounce 2s infinite;
+}
+@keyframes scroll-bounce {
+  0% { transform: translate(-50%, 0); opacity: 1; }
+  50% { transform: translate(-50%, 8px); opacity: 0; }
+  100% { transform: translate(-50%, 0); opacity: 1; }
+}
+
+/* Mask Fade for horizontal scroll areas */
+.mask-fade {
+  -webkit-mask-image: linear-gradient(to right, black 90%, transparent 100%);
+  mask-image: linear-gradient(to right, black 90%, transparent 100%);
+}
+
+/* Custom Scrollbar */
 .custom-scrollbar::-webkit-scrollbar {
-  width: 4px;
+  width: 6px;
+  height: 6px;
 }
 .custom-scrollbar::-webkit-scrollbar-track {
-  background: #0a0a0a;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
   background: #333;
-  border-radius: 2px;
+  border-radius: 3px;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #ef4444;
+}
+
+/* 3D Card Effects */
+.perspective-1000 {
+  perspective: 1000px;
+}
+.transform-style-3d {
+  transform-style: preserve-3d;
 }
