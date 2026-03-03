@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, createContext, useContext } from 'react';
 import { createRoot } from 'react-dom/client';
-import './index.css';
+import './index.css'; // Importing your CSS styles
 import { initializeApp } from 'firebase/app';
 import { 
   getFirestore, 
@@ -84,9 +84,11 @@ const TIMEZONES = ["UTC", "GMT", "Europe/London", "America/New_York", "Asia/Toky
 
 // --- Gemini API Helper ---
 const callGemini = async (prompt, systemInstruction = "You are an elite esports coach for team Syrix. Provide concise, professional, tactical insights.") => {
-  const apiKey = ""; // Set your VITE_GEMINI_API_KEY in environment variables for production
+  // To use AI features in production, set VITE_GEMINI_API_KEY in your Vercel project settings
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
   
-  // Using public stable model
+  if (!apiKey) return "AI System Offline: Missing API Key.";
+
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
   
   const payload = {
@@ -490,6 +492,7 @@ const MapVeto = () => {
     );
 };
 
+// --- Hub View Component ---
 const HubView = ({ setActiveTab, activeTab, rosterName, userTimezone, setUserTimezone, roster, shouts, postShout, refineShout, refiningShout, newShout, setNewShout, mapImages, agentData, matches, absences, onLandingClick }) => (
     <div className="flex flex-col h-screen bg-[#020202]">
         <header className="flex-none h-20 border-b border-zinc-900 flex justify-between items-center px-10 bg-black/50 backdrop-blur-xl">
@@ -648,7 +651,7 @@ const HubView = ({ setActiveTab, activeTab, rosterName, userTimezone, setUserTim
 const LandingNav = ({ scrolled, onHubClick }) => (
     <nav className={`fixed w-full z-50 transition-all duration-500 border-b ${scrolled ? 'bg-black/95 border-red-900/20 py-4' : 'bg-transparent border-transparent py-8'}`}>
         <div className="max-w-7xl mx-auto px-10 flex justify-between items-center">
-            <div className="flex items-center gap-3 cursor-pointer">
+            <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
                 <div className="w-10 h-10 bg-red-600 flex items-center justify-center rounded-sm">
                     <span className="text-white font-black text-2xl italic">S</span>
                 </div>
@@ -656,7 +659,7 @@ const LandingNav = ({ scrolled, onHubClick }) => (
             </div>
             <div className="hidden md:flex items-center gap-2">
                 {['home', 'teams', 'shop', 'matches'].map(id => (
-                    <button key={id} className="px-5 py-2 uppercase font-black tracking-widest text-[11px] text-zinc-400 hover:text-red-500 transition-colors">{id}</button>
+                    <button key={id} onClick={() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })} className="px-5 py-2 uppercase font-black tracking-widest text-[11px] text-zinc-400 hover:text-red-500 transition-colors">{id}</button>
                 ))}
                 <button onClick={onHubClick} className="ml-6 bg-red-600 text-white px-8 py-2 font-black uppercase italic text-[11px] tracking-widest hover:bg-white hover:text-black transition-all shadow-[0_0_30px_rgba(220,38,38,0.2)]">Command Center</button>
             </div>
