@@ -809,15 +809,20 @@ const App = () => {
     return (
         <div className="min-h-screen bg-[#020202]">
             <style>{`
+                html, body { background-color: #020202; color: white; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
                 @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
                 .animate-marquee { animation: marquee 25s linear infinite; }
                 .custom-scrollbar::-webkit-scrollbar { width: 4px; }
                 .custom-scrollbar::-webkit-scrollbar-track { background: #000; }
                 .custom-scrollbar::-webkit-scrollbar-thumb { background: #333; }
+                .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #ef4444; }
                 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
                 .animate-fade-in { animation: fadeIn 0.6s ease-in-out forwards; }
                 @keyframes slideIn { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
                 .animate-slide-in { animation: slideIn 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
+                .perspective-1000 { perspective: 1000px; }
+                .scrollbar-hide::-webkit-scrollbar { display: none; }
+                .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
             `}</style>
             {view === 'landing' ? (
                 <>
