@@ -1,6 +1,4 @@
 import React, { useState, useEffect, useMemo, useRef, createContext, useContext } from 'react';
-import { createRoot } from 'react-dom/client';
-import './index.css'; // Importing your CSS styles
 import { initializeApp } from 'firebase/app';
 import { 
   getFirestore, 
@@ -60,7 +58,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 
-// --- Configuration ---
+// --- Configuration & Constants ---
 const firebaseConfig = {
   apiKey: "AIzaSyAcZy0oY6fmwJ4Lg9Ac-Bq__eMukMC_u0w",
   authDomain: "syrix-team-schedule.firebaseapp.com",
@@ -74,7 +72,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
-const appId = 'syrix-pro-ops'; 
+const appId = 'syrix-pro-ops'; // Fixed app namespace
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const SHORT_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -84,11 +82,10 @@ const TIMEZONES = ["UTC", "GMT", "Europe/London", "America/New_York", "Asia/Toky
 
 // --- Gemini API Helper ---
 const callGemini = async (prompt, systemInstruction = "You are an elite esports coach for team Syrix. Provide concise, professional, tactical insights.") => {
-  // To use AI features in production, set VITE_GEMINI_API_KEY in your Vercel project settings
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
+  // Fixed: Removed import.meta to prevent build errors in non-Vite environments
+  const apiKey = ""; 
   
-  if (!apiKey) return "AI System Offline: Missing API Key.";
-
+  // Use public stable model to avoid 404 errors
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
   
   const payload = {
@@ -102,7 +99,10 @@ const callGemini = async (prompt, systemInstruction = "You are an elite esports 
       body: JSON.stringify(payload)
     });
     
-    if (!response.ok) return "AI Offline: Check API Key.";
+    if (!response.ok) {
+        return "AI Offline: Check API Key or Quota.";
+    }
+
     const result = await response.json();
     return result.candidates?.[0]?.content?.parts?.[0]?.text || "No intelligence available.";
   } catch (e) {
@@ -137,7 +137,7 @@ const ToastProvider = ({ children }) => {
     );
 };
 
-// --- Custom Hooks ---
+// --- Hooks ---
 const useValorantData = () => {
     const [agentData, setAgentData] = useState({});
     const [mapImages, setMapImages] = useState({});
@@ -347,18 +347,29 @@ const StratBook = ({ mapImages, agentData }) => {
     );
 };
 
-const LineupLibrary = ({ mapImages }) => {
+const LineupLibrary = ({ mapImages, user }) => {
     const [selectedMap, setSelectedMap] = useState(MAPS[0]);
-    const [lineups, setLineups] = useState([]);
+    const [allLineups, setAllLineups] = useState([]);
     const [activeLineup, setActiveLineup] = useState(null);
     const addToast = useToast();
 
     useEffect(() => {
-        const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'lineups'), where("map", "==", selectedMap));
-        return onSnapshot(q, (snap) => setLineups(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-    }, [selectedMap]);
+        if (!user) return; // Prevent queries before auth
+        const q = collection(db, 'artifacts', appId, 'public', 'data', 'lineups');
+        return onSnapshot(
+            q, 
+            (snap) => {
+                setAllLineups(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+            },
+            (error) => console.error("Error fetching lineups:", error)
+        );
+    }, [user]);
+
+    // Filter lineups in memory to avoid compound index issues
+    const lineups = useMemo(() => allLineups.filter(l => l.map === selectedMap), [allLineups, selectedMap]);
 
     const handleMapClick = async (e) => {
+        if (!user) return;
         const rect = e.target.getBoundingClientRect();
         const x = ((e.clientX - rect.left) / rect.width) * 100;
         const y = ((e.clientY - rect.top) / rect.height) * 100;
@@ -403,7 +414,7 @@ const LineupLibrary = ({ mapImages }) => {
     );
 };
 
-const WarRoom = () => {
+const WarRoom = ({ user }) => {
     const [enemies, setEnemies] = useState([]);
     const [selectedEnemy, setSelectedEnemy] = useState(null);
     const [intelInput, setIntelInput] = useState('');
@@ -411,13 +422,18 @@ const WarRoom = () => {
     const addToast = useToast();
 
     useEffect(() => {
-        return onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'warroom'), s => {
-            setEnemies(s.docs.map(d => ({id: d.id, ...d.data()})));
-        });
-    }, []);
+        if (!user) return; // Prevent queries before auth
+        return onSnapshot(
+            collection(db, 'artifacts', appId, 'public', 'data', 'warroom'), 
+            s => {
+                setEnemies(s.docs.map(d => ({id: d.id, ...d.data()})));
+            },
+            error => console.error("Error fetching warroom data:", error)
+        );
+    }, [user]);
 
     const saveMapIntel = async () => {
-        if (!selectedEnemy) return;
+        if (!selectedEnemy || !user) return;
         const updatedIntel = { ...(selectedEnemy.mapIntel || {}), [selectedMapIntel]: intelInput };
         await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'warroom', selectedEnemy.id), { mapIntel: updatedIntel });
         addToast("Dossier Updated");
@@ -428,7 +444,7 @@ const WarRoom = () => {
             <div className="lg:col-span-4">
                 <Card title="Target Dossiers" action={<button className="text-red-600" onClick={async () => {
                     const name = prompt("Enemy Organization Name:");
-                    if (name) await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'warroom'), { name, threat: 'Medium', mapIntel: {} });
+                    if (name && user) await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'warroom'), { name, threat: 'Medium', mapIntel: {} });
                 }}><Plus size={16}/></button>}>
                     <div className="space-y-2 max-h-[600px] overflow-y-auto custom-scrollbar">
                         {enemies.map(e => (
@@ -463,20 +479,29 @@ const WarRoom = () => {
     );
 };
 
-const MapVeto = () => {
+const MapVeto = ({ user }) => {
     const [vetoState, setVetoState] = useState({});
+    
     useEffect(() => {
-        return onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'general', 'map_veto'), (snap) => {
-            if (snap.exists()) setVetoState(snap.data());
-        });
-    }, []);
+        if (!user) return; // Prevent queries before auth
+        return onSnapshot(
+            doc(db, 'artifacts', appId, 'public', 'data', 'general', 'map_veto'), 
+            (snap) => {
+                if (snap.exists()) setVetoState(snap.data());
+            },
+            (error) => console.error("Error fetching map vetoes:", error)
+        );
+    }, [user]);
+
     const toggleMap = async (map) => {
+        if (!user) return;
         const current = vetoState[map] || 'neutral';
         const next = current === 'neutral' ? 'ban' : current === 'ban' ? 'pick' : 'neutral';
         await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'general', 'map_veto'), { ...vetoState, [map]: next });
     };
+
     return (
-        <Card title="Veto Board" action={<button onClick={async() => await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'general', 'map_veto'), {})}>Reset</button>}>
+        <Card title="Veto Board" action={<button onClick={async() => { if(user) await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'general', 'map_veto'), {})}}>Reset</button>}>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                 {MAPS.map(map => {
                     const status = vetoState[map] || 'neutral';
@@ -493,7 +518,7 @@ const MapVeto = () => {
 };
 
 // --- Hub View Component ---
-const HubView = ({ setActiveTab, activeTab, rosterName, userTimezone, setUserTimezone, roster, shouts, postShout, refineShout, refiningShout, newShout, setNewShout, mapImages, agentData, matches, absences, onLandingClick }) => (
+const HubView = ({ setActiveTab, activeTab, rosterName, userTimezone, setUserTimezone, roster, shouts, postShout, refineShout, refiningShout, newShout, setNewShout, mapImages, agentData, matches, absences, onLandingClick, user }) => (
     <div className="flex flex-col h-screen bg-[#020202]">
         <header className="flex-none h-20 border-b border-zinc-900 flex justify-between items-center px-10 bg-black/50 backdrop-blur-xl">
             <div className="flex items-center gap-4 cursor-pointer" onClick={onLandingClick}>
@@ -568,7 +593,7 @@ const HubView = ({ setActiveTab, activeTab, rosterName, userTimezone, setUserTim
                                     <button className="w-full bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 py-3 text-[10px] font-black uppercase italic text-zinc-400 hover:text-white" onClick={async () => {
                                       const start = prompt("Start Date:");
                                       const end = prompt("End Date:");
-                                      if(start && end) await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'leaves'), { user: rosterName, start, end });
+                                      if(start && end && user) await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'leaves'), { user: rosterName, start, end });
                                     }}>Register Absence</button>
                                   </div>
                                 </Card>
@@ -613,9 +638,9 @@ const HubView = ({ setActiveTab, activeTab, rosterName, userTimezone, setUserTim
                 )}
                 {activeTab === 'aicoach' && <AICoach />}
                 {activeTab === 'stratbook' && <StratBook mapImages={mapImages} agentData={agentData} />}
-                {activeTab === 'library' && <LineupLibrary mapImages={mapImages} agentData={agentData} />}
-                {activeTab === 'warroom' && <WarRoom />}
-                {activeTab === 'mapveto' && <MapVeto />}
+                {activeTab === 'library' && <LineupLibrary mapImages={mapImages} agentData={agentData} user={user} />}
+                {activeTab === 'warroom' && <WarRoom user={user} />}
+                {activeTab === 'mapveto' && <MapVeto user={user} />}
                 {activeTab === 'matches' && (
                     <div className="space-y-10 animate-fade-in max-w-5xl mx-auto pt-10">
                         <h2 className="text-7xl font-black italic uppercase tracking-tighter text-white">OP <span className="text-red-600">HISTORY</span></h2>
@@ -648,31 +673,14 @@ const HubView = ({ setActiveTab, activeTab, rosterName, userTimezone, setUserTim
     </div>
 );
 
-const LandingNav = ({ scrolled, onHubClick }) => (
-    <nav className={`fixed w-full z-50 transition-all duration-500 border-b ${scrolled ? 'bg-black/95 border-red-900/20 py-4' : 'bg-transparent border-transparent py-8'}`}>
-        <div className="max-w-7xl mx-auto px-10 flex justify-between items-center">
-            <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-                <div className="w-10 h-10 bg-red-600 flex items-center justify-center rounded-sm">
-                    <span className="text-white font-black text-2xl italic">S</span>
-                </div>
-                <span className="font-black text-2xl uppercase tracking-tighter italic text-white">SYRIX</span>
-            </div>
-            <div className="hidden md:flex items-center gap-2">
-                {['home', 'teams', 'shop', 'matches'].map(id => (
-                    <button key={id} onClick={() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })} className="px-5 py-2 uppercase font-black tracking-widest text-[11px] text-zinc-400 hover:text-red-500 transition-colors">{id}</button>
-                ))}
-                <button onClick={onHubClick} className="ml-6 bg-red-600 text-white px-8 py-2 font-black uppercase italic text-[11px] tracking-widest hover:bg-white hover:text-black transition-all shadow-[0_0_30px_rgba(220,38,38,0.2)]">Command Center</button>
-            </div>
-        </div>
-    </nav>
-);
-
+// --- App Root Component ---
 const App = () => {
     const [view, setView] = useState('landing');
     const [activeTab, setActiveTab] = useState('dashboard');
     const [user, setUser] = useState(null);
     const [rosterName, setRosterName] = useState(null);
     const [scrolled, setScrolled] = useState(false);
+    const [isMenuOpen, setIsMenuOpen] = useState(false);
     
     // Data States
     const [roster, setRoster] = useState([]);
@@ -686,6 +694,27 @@ const App = () => {
     const { agentData, mapImages } = useValorantData();
     const addToast = useToast();
 
+    // Reusable Nav Component for Landing
+    const LandingNav = () => (
+        <nav className={`fixed w-full z-50 transition-all duration-500 border-b ${scrolled ? 'bg-black/95 border-red-900/20 py-4' : 'bg-transparent border-transparent py-8'}`}>
+            <div className="max-w-7xl mx-auto px-6 flex justify-between items-center">
+                <div className="flex items-center gap-3 cursor-pointer" onClick={() => scrollToSection('home')}>
+                    <div className="w-10 h-10 bg-red-600 flex items-center justify-center rounded-sm">
+                        <span className="text-white font-black text-2xl italic">S</span>
+                    </div>
+                    <span className="font-black text-2xl uppercase tracking-tighter italic text-white">SYRIX</span>
+                </div>
+                <div className="hidden md:flex items-center gap-2">
+                    {['home', 'teams', 'shop', 'matches'].map(id => (
+                        <button key={id} onClick={() => scrollToSection(id)} className="px-5 py-2 uppercase font-black tracking-widest text-[11px] text-zinc-400 hover:text-red-500 transition-colors">{id}</button>
+                    ))}
+                    <button onClick={() => setView('hub')} className="ml-6 bg-red-600 text-white px-8 py-2 font-black uppercase italic text-[11px] tracking-widest hover:bg-white hover:text-black transition-all shadow-[0_0_30px_rgba(220,38,38,0.2)]">Command Center</button>
+                </div>
+                <button className="md:hidden text-white" onClick={() => setIsMenuOpen(!isMenuOpen)}>{isMenuOpen ? <X size={32} /> : <Menu size={32} />}</button>
+            </div>
+        </nav>
+    );
+
     useEffect(() => {
         const handleScroll = () => setScrolled(window.scrollY > 50);
         window.addEventListener('scroll', handleScroll);
@@ -693,38 +722,62 @@ const App = () => {
     }, []);
 
     useEffect(() => {
-        const init = async () => {
-            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                await signInWithCustomToken(auth, __initial_auth_token);
-            } else {
-                await signInAnonymously(auth);
+        const initAuth = async () => {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (err) {
+                console.error("Firebase Authentication failed:", err);
             }
         };
-        init();
-        return onAuthStateChanged(auth, u => {
+        initAuth();
+        
+        const unsubscribe = onAuthStateChanged(auth, u => {
             setUser(u);
             if (u) setRosterName(u.displayName || `SRX_${u.uid.slice(0, 4)}`);
         });
+        return () => unsubscribe();
     }, []);
 
     useEffect(() => {
+        // Crucial Fix: Only execute database queries AFTER the user is authenticated
         if (!user) return;
+
         const unsubs = [
-            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'roster'), s => setRoster(s.docs.map(d => ({id: d.id, ...d.data()})))),
-            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'events'), s => setMatches(s.docs.map(d => ({id: d.id, ...d.data()})).sort((a,b) => new Date(b.date) - new Date(a.date)))),
-            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'shoutbox'), s => setShouts(s.docs.map(d => ({id: d.id, ...d.data()})).sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)))),
-            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'leaves'), s => setAbsences(s.docs.map(d => ({id: d.id, ...d.data()}))))
+            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'roster'), 
+              s => setRoster(s.docs.map(d => ({id: d.id, ...d.data()}))), 
+              e => console.error("Roster query error:", e)
+            ),
+            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'events'), 
+              s => setMatches(s.docs.map(d => ({id: d.id, ...d.data()})).sort((a,b) => new Date(b.date) - new Date(a.date))), 
+              e => console.error("Events query error:", e)
+            ),
+            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'shoutbox'), 
+              s => setShouts(s.docs.map(d => ({id: d.id, ...d.data()})).sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))), 
+              e => console.error("Shoutbox query error:", e)
+            ),
+            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'leaves'), 
+              s => setAbsences(s.docs.map(d => ({id: d.id, ...d.data()}))), 
+              e => console.error("Leaves query error:", e)
+            )
         ];
         return () => unsubs.forEach(u => u());
     }, [user]);
 
     const postShout = async (e) => {
         if (e) e.preventDefault();
-        if (!newShout.trim()) return;
-        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'shoutbox'), {
-            text: String(newShout), author: String(rosterName), createdAt: serverTimestamp()
-        });
-        setNewShout('');
+        if (!newShout.trim() || !user) return; // Prevent posting if not authenticated
+        try {
+            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'shoutbox'), {
+                text: String(newShout), author: String(rosterName), createdAt: serverTimestamp()
+            });
+            setNewShout('');
+        } catch (e) {
+            console.error("Failed to send message:", e);
+        }
     };
 
     const refineShout = async () => {
@@ -734,8 +787,18 @@ const App = () => {
             const res = await callGemini(`Rewrite this team message to be professional and motivating: "${newShout}"`);
             setNewShout(res.replace(/^"(.*)"$/, '$1').trim());
             addToast("Refined by AI");
-        } catch (e) { addToast("AI Error", "error"); }
-        finally { setRefiningShout(false); }
+        } catch (e) { 
+            addToast("AI Error", "error"); 
+        } finally { 
+            setRefiningShout(false); 
+        }
+    };
+
+    const scrollToSection = (id) => {
+      const element = document.getElementById(id);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth' });
+      }
     };
 
     return (
@@ -753,7 +816,7 @@ const App = () => {
             `}</style>
             {view === 'landing' ? (
                 <>
-                    <LandingNav scrolled={scrolled} onHubClick={() => setView('hub')} />
+                    <LandingNav />
                     <section id="home" className="relative h-screen flex items-center pt-20 overflow-hidden bg-black">
                         <div className="absolute -bottom-10 -left-20 text-[25rem] font-black text-white/[0.02] uppercase select-none leading-none z-0 italic">SYRIX</div>
                         <div className="max-w-7xl mx-auto px-10 w-full grid grid-cols-1 lg:grid-cols-2 gap-12 items-center z-10">
@@ -795,12 +858,24 @@ const App = () => {
                 agentData={agentData}
                 matches={matches}
                 onLandingClick={() => setView('landing')}
+                user={user} 
             />}
         </div>
     );
 };
 
+export default function Root() {
+    return (
+        <ToastProvider>
+            <App />
+        </ToastProvider>
+    );
+}
+
+// Check if we are running in an environment where we should mount directly
+// This is typically needed for Vite/CRA environments, but not for Next.js/Vercel standard deployments where Root is exported
 const rootElement = document.getElementById('root');
-if (!rootElement) throw new Error('Failed to find the root element');
-const root = createRoot(rootElement);
-root.render(<ToastProvider><App /></ToastProvider>);
+if (rootElement && !rootElement.hasChildNodes()) {
+    const root = createRoot(rootElement);
+    root.render(<Root />);
+}
