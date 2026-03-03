@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, createContext, useContext } from 'react';
+import { createRoot } from 'react-dom/client';
 import { initializeApp } from 'firebase/app';
 import { 
   getFirestore, 
@@ -59,20 +60,23 @@ import {
 } from 'lucide-react';
 
 // --- Configuration & Constants ---
-const firebaseConfig = {
-  apiKey: "AIzaSyAcZy0oY6fmwJ4Lg9Ac-Bq__eMukMC_u0w",
-  authDomain: "syrix-team-schedule.firebaseapp.com",
-  projectId: "syrix-team-schedule",
-  storageBucket: "syrix-team-schedule.firebasestorage.app",
-  messagingSenderId: "571804588891",
-  appId: "1:571804588891:web:c3c17a4859b6b4f057187e",
-  measurementId: "G-VGXG0NCTGX"
-};
+// Gracefully fallback to user config on Vercel, but allow the preview environment to inject its own
+const firebaseConfig = typeof __firebase_config !== 'undefined' 
+  ? JSON.parse(__firebase_config) 
+  : {
+      apiKey: "AIzaSyAcZy0oY6fmwJ4Lg9Ac-Bq__eMukMC_u0w",
+      authDomain: "syrix-team-schedule.firebaseapp.com",
+      projectId: "syrix-team-schedule",
+      storageBucket: "syrix-team-schedule.firebasestorage.app",
+      messagingSenderId: "571804588891",
+      appId: "1:571804588891:web:c3c17a4859b6b4f057187e",
+      measurementId: "G-VGXG0NCTGX"
+    };
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
-const appId = 'syrix-pro-ops'; // Fixed app namespace
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'syrix-pro-ops';
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const SHORT_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -82,11 +86,10 @@ const TIMEZONES = ["UTC", "GMT", "Europe/London", "America/New_York", "Asia/Toky
 
 // --- Gemini API Helper ---
 const callGemini = async (prompt, systemInstruction = "You are an elite esports coach for team Syrix. Provide concise, professional, tactical insights.") => {
-  // Fixed: Removed import.meta to prevent build errors in non-Vite environments
+  // Hardcoded to prevent import.meta.env TypeError crashes in strict environments
   const apiKey = ""; 
   
-  // Use public stable model to avoid 404 errors
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
   
   const payload = {
     contents: [{ parts: [{ text: prompt }] }],
@@ -695,25 +698,34 @@ const App = () => {
     const addToast = useToast();
 
     // Reusable Nav Component for Landing
-    const LandingNav = () => (
-        <nav className={`fixed w-full z-50 transition-all duration-500 border-b ${scrolled ? 'bg-black/95 border-red-900/20 py-4' : 'bg-transparent border-transparent py-8'}`}>
-            <div className="max-w-7xl mx-auto px-6 flex justify-between items-center">
-                <div className="flex items-center gap-3 cursor-pointer" onClick={() => scrollToSection('home')}>
-                    <div className="w-10 h-10 bg-red-600 flex items-center justify-center rounded-sm">
-                        <span className="text-white font-black text-2xl italic">S</span>
+    const LandingNav = () => {
+        const scrollToSection = (id) => {
+            const element = document.getElementById(id);
+            if (element) {
+                element.scrollIntoView({ behavior: 'smooth' });
+            }
+        };
+
+        return (
+            <nav className={`fixed w-full z-50 transition-all duration-500 border-b ${scrolled ? 'bg-black/95 border-red-900/20 py-4' : 'bg-transparent border-transparent py-8'}`}>
+                <div className="max-w-7xl mx-auto px-6 flex justify-between items-center">
+                    <div className="flex items-center gap-3 cursor-pointer" onClick={() => scrollToSection('home')}>
+                        <div className="w-10 h-10 bg-red-600 flex items-center justify-center rounded-sm">
+                            <span className="text-white font-black text-2xl italic">S</span>
+                        </div>
+                        <span className="font-black text-2xl uppercase tracking-tighter italic text-white">SYRIX</span>
                     </div>
-                    <span className="font-black text-2xl uppercase tracking-tighter italic text-white">SYRIX</span>
+                    <div className="hidden md:flex items-center gap-2">
+                        {['home', 'teams', 'shop', 'matches'].map(id => (
+                            <button key={id} onClick={() => scrollToSection(id)} className="px-5 py-2 uppercase font-black tracking-widest text-[11px] text-zinc-400 hover:text-red-500 transition-colors">{id}</button>
+                        ))}
+                        <button onClick={() => setView('hub')} className="ml-6 bg-red-600 text-white px-8 py-2 font-black uppercase italic text-[11px] tracking-widest hover:bg-white hover:text-black transition-all shadow-[0_0_30px_rgba(220,38,38,0.2)]">Command Center</button>
+                    </div>
+                    <button className="md:hidden text-white" onClick={() => setIsMenuOpen(!isMenuOpen)}>{isMenuOpen ? <X size={32} /> : <Menu size={32} />}</button>
                 </div>
-                <div className="hidden md:flex items-center gap-2">
-                    {['home', 'teams', 'shop', 'matches'].map(id => (
-                        <button key={id} onClick={() => scrollToSection(id)} className="px-5 py-2 uppercase font-black tracking-widest text-[11px] text-zinc-400 hover:text-red-500 transition-colors">{id}</button>
-                    ))}
-                    <button onClick={() => setView('hub')} className="ml-6 bg-red-600 text-white px-8 py-2 font-black uppercase italic text-[11px] tracking-widest hover:bg-white hover:text-black transition-all shadow-[0_0_30px_rgba(220,38,38,0.2)]">Command Center</button>
-                </div>
-                <button className="md:hidden text-white" onClick={() => setIsMenuOpen(!isMenuOpen)}>{isMenuOpen ? <X size={32} /> : <Menu size={32} />}</button>
-            </div>
-        </nav>
-    );
+            </nav>
+        );
+    };
 
     useEffect(() => {
         const handleScroll = () => setScrolled(window.scrollY > 50);
@@ -794,13 +806,6 @@ const App = () => {
         }
     };
 
-    const scrollToSection = (id) => {
-      const element = document.getElementById(id);
-      if (element) {
-        element.scrollIntoView({ behavior: 'smooth' });
-      }
-    };
-
     return (
         <div className="min-h-screen bg-[#020202]">
             <style>{`
@@ -872,10 +877,11 @@ export default function Root() {
     );
 }
 
-// Check if we are running in an environment where we should mount directly
-// This is typically needed for Vite/CRA environments, but not for Next.js/Vercel standard deployments where Root is exported
+// FIX: Safely mount the React tree. The previous `!rootElement.hasChildNodes()` check 
+// would fail and prevent rendering entirely if your HTML file had whitespace inside the root div!
 const rootElement = document.getElementById('root');
-if (rootElement && !rootElement.hasChildNodes()) {
+if (rootElement) {
+    rootElement.innerHTML = ''; // Clear any rogue whitespace that prevents mounting
     const root = createRoot(rootElement);
     root.render(<Root />);
 }
