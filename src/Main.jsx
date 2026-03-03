@@ -60,23 +60,29 @@ import {
 } from 'lucide-react';
 
 // --- Configuration & Constants ---
-// Gracefully fallback to user config on Vercel, but allow the preview environment to inject its own
-const firebaseConfig = typeof __firebase_config !== 'undefined' 
-  ? JSON.parse(__firebase_config) 
-  : {
-      apiKey: "AIzaSyAcZy0oY6fmwJ4Lg9Ac-Bq__eMukMC_u0w",
-      authDomain: "syrix-team-schedule.firebaseapp.com",
-      projectId: "syrix-team-schedule",
-      storageBucket: "syrix-team-schedule.firebasestorage.app",
-      messagingSenderId: "571804588891",
-      appId: "1:571804588891:web:c3c17a4859b6b4f057187e",
-      measurementId: "G-VGXG0NCTGX"
-    };
+const firebaseConfig = {
+    apiKey: "AIzaSyAcZy0oY6fmwJ4Lg9Ac-Bq__eMukMC_u0w",
+    authDomain: "syrix-team-schedule.firebaseapp.com",
+    projectId: "syrix-team-schedule",
+    storageBucket: "syrix-team-schedule.firebasestorage.app",
+    messagingSenderId: "571804588891",
+    appId: "1:571804588891:web:c3c17a4859b6b4f057187e",
+    measurementId: "G-VGXG0NCTGX"
+};
 
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const auth = getAuth(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'syrix-pro-ops';
+// Initialize Firebase safely
+let app;
+let db;
+let auth;
+try {
+    app = initializeApp(firebaseConfig);
+    db = getFirestore(app);
+    auth = getAuth(app);
+} catch (error) {
+    console.error("Firebase initialization error", error);
+}
+
+const appId = 'syrix-pro-ops';
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const SHORT_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -356,7 +362,7 @@ const LineupLibrary = ({ mapImages, user }) => {
     const addToast = useToast();
 
     useEffect(() => {
-        if (!user) return; // Prevent queries before auth
+        if (!user || !db) return; 
         const q = collection(db, 'artifacts', appId, 'public', 'data', 'lineups');
         return onSnapshot(
             q, 
@@ -367,11 +373,10 @@ const LineupLibrary = ({ mapImages, user }) => {
         );
     }, [user]);
 
-    // Filter lineups in memory to avoid compound index issues
     const lineups = useMemo(() => allLineups.filter(l => l.map === selectedMap), [allLineups, selectedMap]);
 
     const handleMapClick = async (e) => {
-        if (!user) return;
+        if (!user || !db) return;
         const rect = e.target.getBoundingClientRect();
         const x = ((e.clientX - rect.left) / rect.width) * 100;
         const y = ((e.clientY - rect.top) / rect.height) * 100;
@@ -424,7 +429,7 @@ const WarRoom = ({ user }) => {
     const addToast = useToast();
 
     useEffect(() => {
-        if (!user) return; // Prevent queries before auth
+        if (!user || !db) return; 
         return onSnapshot(
             collection(db, 'artifacts', appId, 'public', 'data', 'warroom'), 
             s => {
@@ -435,7 +440,7 @@ const WarRoom = ({ user }) => {
     }, [user]);
 
     const saveMapIntel = async () => {
-        if (!selectedEnemy || !user) return;
+        if (!selectedEnemy || !user || !db) return;
         const updatedIntel = { ...(selectedEnemy.mapIntel || {}), [selectedMapIntel]: intelInput };
         await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'warroom', selectedEnemy.id), { mapIntel: updatedIntel });
         addToast("Dossier Updated");
@@ -446,7 +451,7 @@ const WarRoom = ({ user }) => {
             <div className="lg:col-span-4">
                 <Card title="Target Dossiers" action={<button className="text-red-600" onClick={async () => {
                     const name = prompt("Enemy Organization Name:");
-                    if (name && user) await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'warroom'), { name, threat: 'Medium', mapIntel: {} });
+                    if (name && user && db) await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'warroom'), { name, threat: 'Medium', mapIntel: {} });
                 }}><Plus size={16}/></button>}>
                     <div className="space-y-2 max-h-[600px] overflow-y-auto custom-scrollbar">
                         {enemies.map(e => (
@@ -485,7 +490,7 @@ const MapVeto = ({ user }) => {
     const [vetoState, setVetoState] = useState({});
     
     useEffect(() => {
-        if (!user) return; // Prevent queries before auth
+        if (!user || !db) return; 
         return onSnapshot(
             doc(db, 'artifacts', appId, 'public', 'data', 'general', 'map_veto'), 
             (snap) => {
@@ -496,14 +501,14 @@ const MapVeto = ({ user }) => {
     }, [user]);
 
     const toggleMap = async (map) => {
-        if (!user) return;
+        if (!user || !db) return;
         const current = vetoState[map] || 'neutral';
         const next = current === 'neutral' ? 'ban' : current === 'ban' ? 'pick' : 'neutral';
         await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'general', 'map_veto'), { ...vetoState, [map]: next });
     };
 
     return (
-        <Card title="Veto Board" action={<button onClick={async() => { if(user) await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'general', 'map_veto'), {})}}>Reset</button>}>
+        <Card title="Veto Board" action={<button onClick={async() => { if(user && db) await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'general', 'map_veto'), {})}}>Reset</button>}>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                 {MAPS.map(map => {
                     const status = vetoState[map] || 'neutral';
@@ -533,7 +538,7 @@ const HubView = ({ setActiveTab, activeTab, rosterName, userTimezone, setUserTim
                 </Select>
                 <div className="text-right border-l border-zinc-900 pl-8 ml-2">
                     <p className="text-xs font-black italic text-white leading-none">{String(rosterName || 'Guest')}</p>
-                    <button onClick={() => signOut(auth)} className="text-[9px] font-black text-red-600 uppercase tracking-widest mt-1">Log Out</button>
+                    <button onClick={() => auth && signOut(auth)} className="text-[9px] font-black text-red-600 uppercase tracking-widest mt-1">Log Out</button>
                 </div>
             </div>
         </header>
@@ -595,7 +600,7 @@ const HubView = ({ setActiveTab, activeTab, rosterName, userTimezone, setUserTim
                                     <button className="w-full bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 py-3 text-[10px] font-black uppercase italic text-zinc-400 hover:text-white" onClick={async () => {
                                       const start = prompt("Start Date:");
                                       const end = prompt("End Date:");
-                                      if(start && end && user) await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'leaves'), { user: rosterName, start, end });
+                                      if(start && end && user && db) await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'leaves'), { user: rosterName, start, end });
                                     }}>Register Absence</button>
                                   </div>
                                 </Card>
@@ -734,6 +739,8 @@ const App = () => {
     }, []);
 
     useEffect(() => {
+        if (!auth) return;
+        
         const initAuth = async () => {
             try {
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
@@ -755,8 +762,7 @@ const App = () => {
     }, []);
 
     useEffect(() => {
-        // Crucial Fix: Only execute database queries AFTER the user is authenticated
-        if (!user) return;
+        if (!user || !db) return;
 
         const unsubs = [
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'roster'), 
@@ -781,7 +787,7 @@ const App = () => {
 
     const postShout = async (e) => {
         if (e) e.preventDefault();
-        if (!newShout.trim() || !user) return; // Prevent posting if not authenticated
+        if (!newShout.trim() || !user || !db) return; 
         try {
             await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'shoutbox'), {
                 text: String(newShout), author: String(rosterName), createdAt: serverTimestamp()
@@ -882,24 +888,8 @@ export default function Root() {
     );
 }
 
-const renderApp = () => {
-    const rootElement = document.getElementById('root');
-    if (!rootElement) {
-        console.error("Root element not found.");
-        return;
-    }
-    
-    // Clean up before mounting, but safely
-    // React 18 createRoot replaces the children anyway
-    
-    // Only mount if it hasn't been mounted yet to prevent duplicates in strict environments
-    if (!rootElement._reactRootContainer) {
-        const root = createRoot(rootElement);
-        root.render(<Root />);
-        // Store a reference to indicate it's mounted, 
-        // using a standard property instead of dataset for better compatibility
-        rootElement._reactRootContainer = root;
-    }
-};
-
-renderApp();
+// Fallback logic for various environments
+const rootElement = document.getElementById('root');
+if (rootElement) {
+    createRoot(rootElement).render(<Root />);
+}
