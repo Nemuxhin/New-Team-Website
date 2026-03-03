@@ -86,7 +86,6 @@ const TIMEZONES = ["UTC", "GMT", "Europe/London", "America/New_York", "Asia/Toky
 
 // --- Gemini API Helper ---
 const callGemini = async (prompt, systemInstruction = "You are an elite esports coach for team Syrix. Provide concise, professional, tactical insights.") => {
-  // Hardcoded to prevent import.meta.env TypeError crashes in strict environments
   const apiKey = ""; 
   
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
@@ -676,6 +675,37 @@ const HubView = ({ setActiveTab, activeTab, rosterName, userTimezone, setUserTim
     </div>
 );
 
+// --- Reusable Nav Component for Landing ---
+// Moved outside of App to prevent unnecessary re-rendering issues
+const LandingNav = ({ scrolled, setView, isMenuOpen, setIsMenuOpen }) => {
+    const scrollToSection = (id) => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.scrollIntoView({ behavior: 'smooth' });
+        }
+    };
+
+    return (
+        <nav className={`fixed w-full z-50 transition-all duration-500 border-b ${scrolled ? 'bg-black/95 border-red-900/20 py-4' : 'bg-transparent border-transparent py-8'}`}>
+            <div className="max-w-7xl mx-auto px-6 flex justify-between items-center">
+                <div className="flex items-center gap-3 cursor-pointer" onClick={() => scrollToSection('home')}>
+                    <div className="w-10 h-10 bg-red-600 flex items-center justify-center rounded-sm">
+                        <span className="text-white font-black text-2xl italic">S</span>
+                    </div>
+                    <span className="font-black text-2xl uppercase tracking-tighter italic text-white">SYRIX</span>
+                </div>
+                <div className="hidden md:flex items-center gap-2">
+                    {['home', 'teams', 'shop', 'matches'].map(id => (
+                        <button key={id} onClick={() => scrollToSection(id)} className="px-5 py-2 uppercase font-black tracking-widest text-[11px] text-zinc-400 hover:text-red-500 transition-colors">{id}</button>
+                    ))}
+                    <button onClick={() => setView('hub')} className="ml-6 bg-red-600 text-white px-8 py-2 font-black uppercase italic text-[11px] tracking-widest hover:bg-white hover:text-black transition-all shadow-[0_0_30px_rgba(220,38,38,0.2)]">Command Center</button>
+                </div>
+                <button className="md:hidden text-white" onClick={() => setIsMenuOpen(!isMenuOpen)}>{isMenuOpen ? <X size={32} /> : <Menu size={32} />}</button>
+            </div>
+        </nav>
+    );
+};
+
 // --- App Root Component ---
 const App = () => {
     const [view, setView] = useState('landing');
@@ -696,36 +726,6 @@ const App = () => {
 
     const { agentData, mapImages } = useValorantData();
     const addToast = useToast();
-
-    // Reusable Nav Component for Landing
-    const LandingNav = () => {
-        const scrollToSection = (id) => {
-            const element = document.getElementById(id);
-            if (element) {
-                element.scrollIntoView({ behavior: 'smooth' });
-            }
-        };
-
-        return (
-            <nav className={`fixed w-full z-50 transition-all duration-500 border-b ${scrolled ? 'bg-black/95 border-red-900/20 py-4' : 'bg-transparent border-transparent py-8'}`}>
-                <div className="max-w-7xl mx-auto px-6 flex justify-between items-center">
-                    <div className="flex items-center gap-3 cursor-pointer" onClick={() => scrollToSection('home')}>
-                        <div className="w-10 h-10 bg-red-600 flex items-center justify-center rounded-sm">
-                            <span className="text-white font-black text-2xl italic">S</span>
-                        </div>
-                        <span className="font-black text-2xl uppercase tracking-tighter italic text-white">SYRIX</span>
-                    </div>
-                    <div className="hidden md:flex items-center gap-2">
-                        {['home', 'teams', 'shop', 'matches'].map(id => (
-                            <button key={id} onClick={() => scrollToSection(id)} className="px-5 py-2 uppercase font-black tracking-widest text-[11px] text-zinc-400 hover:text-red-500 transition-colors">{id}</button>
-                        ))}
-                        <button onClick={() => setView('hub')} className="ml-6 bg-red-600 text-white px-8 py-2 font-black uppercase italic text-[11px] tracking-widest hover:bg-white hover:text-black transition-all shadow-[0_0_30px_rgba(220,38,38,0.2)]">Command Center</button>
-                    </div>
-                    <button className="md:hidden text-white" onClick={() => setIsMenuOpen(!isMenuOpen)}>{isMenuOpen ? <X size={32} /> : <Menu size={32} />}</button>
-                </div>
-            </nav>
-        );
-    };
 
     useEffect(() => {
         const handleScroll = () => setScrolled(window.scrollY > 50);
@@ -821,7 +821,7 @@ const App = () => {
             `}</style>
             {view === 'landing' ? (
                 <>
-                    <LandingNav />
+                    <LandingNav scrolled={scrolled} setView={setView} isMenuOpen={isMenuOpen} setIsMenuOpen={setIsMenuOpen} />
                     <section id="home" className="relative h-screen flex items-center pt-20 overflow-hidden bg-black">
                         <div className="absolute -bottom-10 -left-20 text-[25rem] font-black text-white/[0.02] uppercase select-none leading-none z-0 italic">SYRIX</div>
                         <div className="max-w-7xl mx-auto px-10 w-full grid grid-cols-1 lg:grid-cols-2 gap-12 items-center z-10">
@@ -877,11 +877,11 @@ export default function Root() {
     );
 }
 
-// FIX: Safely mount the React tree. The previous `!rootElement.hasChildNodes()` check 
-// would fail and prevent rendering entirely if your HTML file had whitespace inside the root div!
+// FIX: We no longer clear `innerHTML` here because if your build process 
+// injected `<style>` tags directly into the root, clearing it was deleting the CSS!
 const rootElement = document.getElementById('root');
-if (rootElement) {
-    rootElement.innerHTML = ''; // Clear any rogue whitespace that prevents mounting
+if (rootElement && !rootElement.dataset.reactMounted) {
+    rootElement.dataset.reactMounted = "true";
     const root = createRoot(rootElement);
     root.render(<Root />);
 }
