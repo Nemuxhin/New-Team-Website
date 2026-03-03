@@ -882,11 +882,24 @@ export default function Root() {
     );
 }
 
-// FIX: We no longer clear `innerHTML` here because if your build process 
-// injected `<style>` tags directly into the root, clearing it was deleting the CSS!
-const rootElement = document.getElementById('root');
-if (rootElement && !rootElement.dataset.reactMounted) {
-    rootElement.dataset.reactMounted = "true";
-    const root = createRoot(rootElement);
-    root.render(<Root />);
-}
+const renderApp = () => {
+    const rootElement = document.getElementById('root');
+    if (!rootElement) {
+        console.error("Root element not found.");
+        return;
+    }
+    
+    // Clean up before mounting, but safely
+    // React 18 createRoot replaces the children anyway
+    
+    // Only mount if it hasn't been mounted yet to prevent duplicates in strict environments
+    if (!rootElement._reactRootContainer) {
+        const root = createRoot(rootElement);
+        root.render(<Root />);
+        // Store a reference to indicate it's mounted, 
+        // using a standard property instead of dataset for better compatibility
+        rootElement._reactRootContainer = root;
+    }
+};
+
+renderApp();
